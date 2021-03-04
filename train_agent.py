@@ -14,7 +14,7 @@ from sklearn.preprocessing import OneHotEncoder
 
 class ReplayBuffer():
     """
-        Thank you: https://github.com/BY571/Upside-Down-Reinforcement-Learning
+        Thank you: https://github.com/BY571/
     """
 
     def __init__(self, max_size):
@@ -30,7 +30,7 @@ class ReplayBuffer():
         self.buffer = sorted(self.buffer, key = lambda i: i["summed_rewards"],reverse=True)
         # keep the max buffer size
         self.buffer = self.buffer[:self.max_size]
-    
+
     def get_random_samples(self, batch_size):
         self.sort()
         idxs = np.random.randint(0, len(self.buffer), batch_size)
@@ -60,6 +60,8 @@ class UpsideDownAgent():
         self.return_scale = 0.02
 
         self.behaviour_function = utils.get_functional_behaviour_function(self.state_size, self.command_size, self.action_size)
+        self.testing_rewards = []
+    
 
     def get_action(self, observation, command):
         """
@@ -78,8 +80,7 @@ class UpsideDownAgent():
         if len(self.memory) < self.train_start:
             return
 
-
-        for i in range(1):
+        for i in range(10):
             random_episodes = self.memory.get_random_samples(self.batch_size)
        
             training_observations = np.zeros((self.batch_size, self.state_size))
@@ -93,13 +94,13 @@ class UpsideDownAgent():
                 t2 = np.random.randint(t1+1, T)
         
                 state = episode['states'][t1]
-                desired_reward = sum(episode["rewards"][t1:t2]) 
-                desired_return = t2 -t1
+                desired_return = sum(episode["rewards"][t1:t2]) 
+                desired_horizon = t2 -t1
  
                 target = episode['actions'][t1]
             
                 training_observations[idx] = state[0]
-                training_commands[idx] = np.asarray([desired_reward, desired_return])
+                training_commands[idx] = np.asarray([desired_return, desired_horizon])
                 y.append(target) 
          
             y = keras.utils.to_categorical(y) 
@@ -113,17 +114,21 @@ class UpsideDownAgent():
         returns = [i["summed_rewards"] for i in best_episodes]
         exploratory_desired_returns = np.random.uniform(np.mean(returns), np.mean(returns)+np.std(returns))
 
-        return [exploratory_desired_returns, exploratory_desired_returns]
+        #print(exploratory_desired_horizon)
+        #print(exploratory_desired_returns)
+
+        return [exploratory_desired_returns, exploratory_desired_horizon]
 
     def generate_new_behaviour(self, exploratory_commands):
-         
+        
         env = gym.make('CartPole-v0')
         state = env.reset()
         states = []
         actions = []
         rewards = []
+        done = False
 
-        while True:
+        while not done:
             state = np.reshape(state, [1, len(state)])
             #print('Generating random trajectories')
             states.append(state)
@@ -142,18 +147,16 @@ class UpsideDownAgent():
             rewards.append(reward)
         
             state = next_state
-            #self.desired_return -= reward
-            #self.desired_horizon -= 1
-            #self.desired_horizon = np.maximum(self.desired_horizon, 1)
             
-            if done:
-                self.memory.add_sample(states, actions, rewards)
-                break
-
+            exploratory_commands[0] -= reward 
+            exploratory_commands[1] -= 1 
+            exploratory_commands[1] = np.maximum(self.desired_horizon, 1)
+         
+        self.memory.add_sample(states, actions, rewards)
 
 def run_experiment():
 
-    episodes = 500
+    episodes = 200
     
     env = gym.make('CartPole-v0')
     
@@ -167,23 +170,23 @@ def run_experiment():
         done = False
         score = 0
         state = env.reset()
-        
+         
         scores = []
         states = []
         actions = []
         rewards = []
-
-        while not done:
-            if agent.render:
-                env.render()
-
-            state = np.reshape(state, [1, state_size])
+        
+        desired_return = 1
+        desired_horizon = 1 
  
+        while not done:           
             agent.train_behaviour_function()
+        
+            state = np.reshape(state, [1, state_size])
             states.append(state)
 
             observation = state
-            command = np.asarray([agent.desired_return, agent.desired_horizon])
+            command = np.asarray([desired_return, desired_horizon])
             command = np.reshape(command, [1, len(command)])
 
             action = agent.get_action(observation, command)
@@ -196,19 +199,21 @@ def run_experiment():
             score += reward
 
             state = next_state
-            agent.desired_return -= reward 
-            agent.desired_horizon -= 1 
-            agent.desired_horizon = np.maximum(agent.desired_horizon, 1)
- 
-        tot_rewards.append(score)
+            
+            desired_return -= reward 
+            desired_horizon -= 1 
+            desired_horizon = np.maximum(desired_horizon, 1)
+        
+            #print(desired_return)
 
         agent.memory.add_sample(states, actions, rewards)
-
-        exploratory_commands = agent.sample_exploratory_commands()
-        agent.generate_new_behaviour(exploratory_commands)
-        
+          
+        tot_rewards.append(score)
         print(score)
         
+        exploratory_commands = agent.sample_exploratory_commands()
+        agent.generate_new_behaviour(exploratory_commands)
+       
     plt.plot(tot_rewards)
     plt.show()
 

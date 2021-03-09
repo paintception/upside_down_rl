@@ -10,7 +10,13 @@ import numpy as np
 from collections import deque
 from matplotlib import pyplot as plt
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, AdaBoostClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
 
+from sklearn.exceptions import NotFittedError
+from sklearn.ensemble import GradientBoostingClassifier
 
 class ReplayBuffer():
     """
@@ -45,8 +51,9 @@ class ReplayBuffer():
         return len(self.buffer)
 
 class UpsideDownAgent():
-    def __init__(self, environment):
+    def __init__(self, environment, approximator):
         self.environment = gym.make(environment)
+        self.approximator = approximator
         self.state_size = self.environment.observation_space.shape[0]
         self.action_size = self.environment.action_space.n
         self.warm_up_episodes = 50
@@ -59,8 +66,21 @@ class UpsideDownAgent():
         self.desired_horizon = 1
         self.horizon_scale = 0.02
         self.return_scale = 0.02
+        self.testing_state = 0
 
-        self.behaviour_function = utils.get_functional_behaviour_function(self.state_size, self.command_size, self.action_size)
+        if approximator == 'neural_network':
+            self.behaviour_function = utils.get_functional_behaviour_function(self.state_size, self.command_size, self.action_size)
+        
+        elif approximator == 'forest': 
+            self.behaviour_function = RandomForestClassifier()
+        
+        elif approximator == 'extra-trees':
+            self.behaviour_function = ExtraTreesClassifier()
+
+        elif approximator == 'knn':
+            self.behaviour_function = KNeighborsClassifier()
+
+
         self.testing_rewards = []
         self.warm_up_buffer()
 
@@ -84,9 +104,6 @@ class UpsideDownAgent():
                 
                 command = np.asarray([desired_return * self.return_scale, desired_horizon * self.horizon_scale])
                 
-                #print('Command {}'.format(command))
-                #time.sleep(0.2)
-
                 command = np.reshape(command, [1, len(command)])
 
                 action = self.get_action(observation, command)
@@ -111,18 +128,48 @@ class UpsideDownAgent():
             We will sample from the action distribution modeled by the Behavior Function 
         """
         
-        action_probs = self.behaviour_function.predict([observation, command])
-        action = np.random.choice(np.arange(0, self.action_size), p=action_probs[0])
+        if self.approximator == 'neural_network':
+            action_probs = self.behaviour_function.predict([observation, command])
+            action = np.random.choice(np.arange(0, self.action_size), p=action_probs[0])
 
-        return action
+            return action
+
+        elif self.approximator in ['forest', 'extra-trees', 'knn', 'svm']:
+            try:
+                input_state = np.concatenate((observation, command), axis=1)
+                action = self.behaviour_function.predict(input_state)
+               
+                return np.argmax(action)
+
+            except NotFittedError as e:
+                return random.randint(0,1)
+
  
     def get_greedy_action(self, observation, command):
- 
-        action_probs = self.behaviour_function.predict([observation, command])
-        print(action_probs)
-        action = np.argmax(action_probs)
 
-        return action
+        if self.approximator == 'neural_network':
+            action_probs = self.behaviour_function.predict([observation, command])
+            action = np.argmax(action_probs)
+
+            return action
+
+        else:
+            input_state = np.concatenate((observation, command), axis=1)
+            action = self.behaviour_function.predict(input_state)
+            
+            self.testing_state += 1 
+
+            importances = self.behaviour_function.feature_importances_
+            std = np.std([tree.feature_importances_ for tree in self.behaviour_function.estimators_],axis=0)
+            indices = np.argsort(importances)[::-1]
+             
+            plt.title("Feature Importances")
+            plt.bar(range(input_state.shape[1]), importances[indices], color="r", yerr=std[indices], align="center")
+            plt.xticks(range(input_state.shape[1]), indices)
+            plt.xlim([-1, input_state.shape[1]])
+            plt.savefig('./results/state_' + str(self.testing_state) + '_importances.jpg' )
+
+            return np.argmax(action)
  
     def train_behaviour_function(self):
 
@@ -150,7 +197,15 @@ class UpsideDownAgent():
          
         _y = keras.utils.to_categorical(y) 
 
-        self.behaviour_function.fit([training_observations, training_commands], _y, verbose=0)
+
+        if self.approximator == 'neural_network':
+            self.behaviour_function.fit([training_observations, training_commands], _y, verbose=0)
+
+        elif self.approximator in ['forest', 'extra-trees', 'knn', 'svm']:
+            input_classifier = np.concatenate((training_observations, training_commands), axis=1)
+
+            self.behaviour_function.fit(input_classifier, _y)
+        
 
     def sample_exploratory_commands(self):
         best_episodes = self.memory.get_n_best(self.last_few)
@@ -161,9 +216,9 @@ class UpsideDownAgent():
 
         return [exploratory_desired_returns, exploratory_desired_horizon]
 
-    def generate_episode(self, e, desired_return, desired_horizon, testing):
+    def generate_episode(self, environment, e, desired_return, desired_horizon, testing):
        
-        env = gym.make('CartPole-v0')
+        env = gym.make(environment)
         tot_rewards = []
         done = False
         
@@ -204,34 +259,59 @@ class UpsideDownAgent():
             
         self.memory.add_sample(states, actions, rewards)
         
-        testing_scores.append(score)
+        self.testing_rewards.append(score)
 
         if testing:
+            print('Querying the model ...')
             print('Testing score: {}'.format(score))
+
+        return score
 
 def run_experiment():
 
-    episodes = 250    
-    desired_returns = []
-    agent = UpsideDownAgent('CartPole-v0')
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    
+    parser.add_argument('--approximator', type=str)
+    parser.add_argument('--environment', type=str)
+    parser.add_argument('--seed', type=int)
+
+    args = parser.parse_args()
+
+    approximator = args.approximator
+    environment = args.environment
+    seed = args.seed
+
+    episodes = 200 
+    returns = []
+
+    agent = UpsideDownAgent(environment, approximator)
 
     for e in range(episodes):
         for i in range(100):
             agent.train_behaviour_function()
 
         for i in range(15):            
+            tmp_r = []
             exploratory_commands = agent.sample_exploratory_commands() # Line 5 Algorithm 1
             desired_return = exploratory_commands[0]
             desired_horizon = exploratory_commands[1]
-            agent.generate_episode(e, desired_return, desired_horizon, False)
+            r = agent.generate_episode(environment, e, desired_return, desired_horizon, False)
+            tmp_r.append(r)
+
+        print(np.mean(tmp_r))
+        returns.append(np.mean(tmp_r))
 
         exploratory_commands = agent.sample_exploratory_commands()
-        desired_returns.append(exploratory_commands[0])
+        
+    agent.generate_episode(environment, 1, 200, 200, True)
 
-    agent.generate_episode(1, 200, 200, True)
+    utils.save_results(environment, approximator, seed, returns)
+    
+    if approximator == 'neural_network':
+        utils.save_trained_model(environment, seed, agent.behaviour_function)
 
-    plt.plot(agent.testing_rewards)
-    plt.show()
 
 if __name__ == "__main__":
     run_experiment()

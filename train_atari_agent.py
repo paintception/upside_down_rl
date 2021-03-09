@@ -49,7 +49,7 @@ class UpsideDownAgent():
         self.approximator = approximator
         self.state_size = (84, 84, 4)
         self.action_size = 3
-        self.warm_up_episodes = 1
+        self.warm_up_episodes = 1 #50 
         self.render = False
         self.memory = ReplayBuffer(700)
         self.last_few = 50
@@ -136,6 +136,8 @@ class UpsideDownAgent():
             We will sample from the action distribution modeled by the Behavior Function 
         """
         
+        observation = np.float32(observation / 255.0)
+
         action_probs = self.behaviour_function.predict([observation, command])
         action = np.random.choice(np.arange(0, self.action_size), p=action_probs[0])
 
@@ -162,20 +164,19 @@ class UpsideDownAgent():
             t1 = np.random.randint(0, T-1)
             t2 = np.random.randint(t1+1, T)
             
-            state = episode['states'][t1]
+            state = np.float32(episode['states'][t1] / 255.)
             desired_return = sum(episode["rewards"][t1:t2]) 
             desired_horizon = t2 -t1
  
             target = episode['actions'][t1]
-            
+    
             training_observations[idx] = state[0]
             training_commands[idx] = np.asarray([desired_return*self.return_scale, desired_horizon*self.horizon_scale])
             y.append(target) 
          
-        _y = keras.utils.to_categorical(y) 
-
-
-        self.behaviour_function.fit([training_observations, training_commands], _y, verbose=1)
+        _y = keras.utils.to_categorical(y, num_classes=self.action_size) 
+      
+        self.behaviour_function.fit([training_observations, training_commands], _y, verbose=0)
        
 
     def sample_exploratory_commands(self):
@@ -190,6 +191,7 @@ class UpsideDownAgent():
     def generate_episode(self, environment, e, desired_return, desired_horizon, testing):
        
         env = gym.make(environment)
+
         tot_rewards = []
         
         done = False
@@ -200,7 +202,7 @@ class UpsideDownAgent():
         actions = []
         rewards = []
 
-        step, score, start_lide = 0, 0, 5 
+        step, score, start_life = 0, 0, 5 
 
         observe = env.reset()
         for _ in range(random.randint(1, 30)):
@@ -208,7 +210,7 @@ class UpsideDownAgent():
 
         state = utils.pre_processing(observe)
         history = np.stack((state, state, state, state), axis=2)
-        history = np.reshape([history], (1, 84, 84, 84))
+        history = np.reshape([history], (1, 84, 84, 4))
 
         while not done:            
             states.append(history)
@@ -231,7 +233,7 @@ class UpsideDownAgent():
 
             next_state, reward, done, info = env.step(real_action)
             next_state = utils.pre_processing(observe)
-            next_state = np.reshape([next_state], (1, 84, 84, 84))
+            next_state = np.reshape([next_state], (1, 84, 84, 1))
             next_history = np.append(next_state, history[:, :, :, :3], axis = 3)
 
             clipped_reward = np.clip(reward, -1, 1)
@@ -241,7 +243,7 @@ class UpsideDownAgent():
 
             if start_life > info['ale.lives']:
                 dead = True 
-                start_lide = info['ale.lives']
+                start_life = info['ale.lives']
 
             if dead:
                 dead = False
@@ -268,9 +270,9 @@ def run_experiment():
 
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('--approximator', type=str)
-    parser.add_argument('--environment', type=str)
-    parser.add_argument('--seed', type=int)
+    parser.add_argument('--approximator', type=str, default='neural_network')
+    parser.add_argument('--environment', type=str, default='PongDeterministic-v4')
+    parser.add_argument('--seed', type=int, default=1)
 
     args = parser.parse_args()
 
@@ -278,15 +280,20 @@ def run_experiment():
     environment = args.environment
     seed = args.seed
 
-    episodes = 200  
+    episodes =  1500  
     returns = []
 
     agent = UpsideDownAgent(environment, approximator)
 
     for e in range(episodes):
+
+        print("Episode {}".format(e))
+
         for i in range(100):
             agent.train_behaviour_function()
 
+        print("Finished training B!")
+        
         for i in range(15):            
             tmp_r = []
             exploratory_commands = agent.sample_exploratory_commands() # Line 5 Algorithm 1
@@ -302,7 +309,7 @@ def run_experiment():
         
     #agent.generate_episode(environment, 1, 200, 200, True)
 
-    utils.save_results(environment, approximator, seed, returns)
+        utils.save_results(environment, approximator, seed, returns)
     
     if approximator == 'neural_network':
         utils.save_trained_model(environment, seed, agent.behaviour_function)

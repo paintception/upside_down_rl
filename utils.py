@@ -42,6 +42,41 @@ def get_functional_behaviour_function(state_size, command_size, action_size):
     return model
 
 def get_atari_behaviour_function(action_size):
+    
+    print('Getting the model')
+
+    input_state = Input(shape=(84,84,4))
+    
+    first_conv = Conv2D(
+            32, (8, 8), strides=(4,4), activation='relu')(input_state)
+    second_conv = Conv2D(
+            64, (4, 4), strides=(2,2), activation='relu')(first_conv)
+    third_conv = Conv2D(
+            64, (3, 3), strides=(1,1), activation='relu')(second_conv)
+
+    flattened = Flatten()(third_conv)
+    dense_layer = Dense(512, activation='relu')(flattened)
+
+    command_input = keras.Input(shape=(2,))
+    sigmoidal_layer = Dense(512, activation='sigmoid')(command_input)
+
+    multiplied_layer = Multiply()([dense_layer, sigmoidal_layer])
+    final_layer = Dense(256, activation='relu')(multiplied_layer)
+
+    action_layer = Dense(action_size, activation='softmax')(final_layer)
+
+    model = Model(inputs=[input_state, command_input], outputs=action_layer)
+    model.compile(loss='categorical_crossentropy', optimizer=RMSprop(lr=0.001, rho=0.95, epsilon=0.01))
+
+
+    print(model.summary())
+
+    return model 
+
+def get_catch_behaviour_function(action_size):
+    
+    print('Getting the Catch-model')
+
     input_state = Input(shape=(84,84,4))
     
     first_conv = Conv2D(
@@ -84,4 +119,3 @@ def save_trained_model(environment, seed, model):
     
     model.save_weights(storing_path + '/' + 'trained_model.h5')
 
-get_atari_behaviour_function(3)

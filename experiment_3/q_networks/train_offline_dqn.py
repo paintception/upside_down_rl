@@ -3,6 +3,8 @@ import sys
 import gym
 import pickle
 import random
+import utils 
+
 import numpy as np
 
 from collections import deque
@@ -20,7 +22,7 @@ class DQNAgent:
         self.state_size = state_size
         self.action_size = action_size
         self.discount_factor = 0.99
-        self.learning_rate = 0.0001
+        self.learning_rate = 0.00001
         self.batch_size = 256
         self.model = self.build_model()
         self.target_model = self.build_model()
@@ -84,6 +86,7 @@ class DQNAgent:
 
 def run_DQN():
     episodes = 500 
+    seed = 2 
     results = []
     game = 'CartPole-v0'
 
@@ -112,6 +115,8 @@ def run_DQN():
 
         print(score)
         results.append(score)
+    
+    utils.save_offline_results(game, 'DQN', seed, results)
 
     plt.plot(results)
     plt.show()

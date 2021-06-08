@@ -3,6 +3,7 @@ import os
 import sys
 import gym
 import random
+import utils
 import numpy as np
 
 from collections import deque
@@ -94,6 +95,7 @@ class DoubleDQNAgent:
 
 def run_DDQN():
     episodes = 500
+    seed = 1
     results = []
     game = 'CartPole-v0'
 
@@ -124,6 +126,8 @@ def run_DDQN():
                 agent.update_target_model()
         
         results.append(score)
+
+    utils.save_trained_model(game, seed, 'DDQN', agent.model)
 
     plt.plot(results)
     plt.show()

@@ -15,18 +15,28 @@ from matplotlib import pyplot as plt
 WEIGHTS_PATH = './trained_models/CartPole-v0/1/'
 BUFFER_PATH = './buffers/CartPole-v0/1/'
 
-
 class Agent:
     def __init__(self, algorithm, state_size, action_size):
         self.algorithm = algorithm
         self.render = False
         self.state_size = state_size
         self.action_size = action_size
-        self.memory = deque(maxlen=10000)
+        self.memory = deque(maxlen=2000)
 
         if self.algorithm in ['DQN', 'DDQN', 'DQV']:
             self.model = self.build_model()
             self.model.load_weights(os.path.join(WEIGHTS_PATH, self.algorithm, 'trained_model.h5'))
+        else:
+            self.model = self.build_actor()
+            self.model.load_weights(os.path.join(WEIGHTS_PATH, self.algorithm, 'trained_model.h5'))
+
+
+    def build_actor(self):
+        actor = Sequential()
+        actor.add(Dense(24, input_dim=self.state_size, activation='relu', kernel_initializer='he_uniform'))
+        actor.add(Dense(self.action_size, activation='softmax', kernel_initializer='he_uniform'))
+
+        return actor
 
     def build_model(self):
         model = Sequential()
@@ -40,8 +50,14 @@ class Agent:
         return model
 
     def get_action(self, state):
-        q_value = self.model.predict(state)
-        return np.argmax(q_value[0])
+        if self.algorithm == 'A2C':
+            policy = self.model.predict(state, batch_size=1).flatten()
+
+            return np.random.choice(self.action_size, 1, p=policy)[0]
+
+        else:
+            q_value = self.model.predict(state)
+            return np.argmax(q_value[0])
 
     def append_sample(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
@@ -54,7 +70,7 @@ class Agent:
             pickle.dump(self.memory, filehandler)
 
 def fill_buffer(algorithm):
-    episodes = 25 
+    max_len = 10000 
     results = []
     game = 'CartPole-v0'
 
@@ -65,7 +81,7 @@ def fill_buffer(algorithm):
 
     agent = Agent(algorithm, state_size, action_size)
 
-    for e in range(episodes):
+    while True:
         done = False
         score = 0
         state = env.reset()
@@ -80,5 +96,9 @@ def fill_buffer(algorithm):
 
             score += reward
             state = next_state 
+
+        if len(agent.memory) > max_len:
+            agent.save_buffer()
+            break
 
 fill_buffer('DQN')

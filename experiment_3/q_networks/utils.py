@@ -4,7 +4,7 @@ import pickle
 import keras
 import numpy as np
 
-STORING_PATH = './results/'
+STORING_PATH = '../offline_rl_results/'
 MODELS_PATH = './trained_models/'
 
 def save_results(environment, approximator, seed, rewards):
@@ -21,3 +21,9 @@ def save_trained_model(environment, seed, algorithm, model):
     
     model.save_weights(storing_path + '/' + 'trained_model.h5')
 
+def save_offline_results(environment, algorithm, seed, returns):
+    storing_path = os.path.join(STORING_PATH, algorithm, str(seed))
+    if not os.path.exists(storing_path):
+        os.makedirs(storing_path)
+
+    np.save(storing_path + '/rewards.npy', returns)

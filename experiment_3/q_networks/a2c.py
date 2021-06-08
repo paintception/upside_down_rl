@@ -1,6 +1,7 @@
 import os 
 import sys
 import gym
+import utils 
 
 import numpy as np
 
@@ -67,6 +68,7 @@ class A2CAgent:
 
 def run_A2C():
     episodes = 500
+    seed = 1
     results = []
     game = 'CartPole-v0'
 
@@ -93,6 +95,8 @@ def run_A2C():
             state = next_state
 
         results.append(score)
+
+    utils.save_trained_model(game, seed, 'A2C', agent.actor)
 
     plt.plot(results)
     plt.show()

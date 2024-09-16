@@ -8,8 +8,8 @@ from keras.layers import Dense, Multiply, Input, Conv2D, Flatten
 from keras.models import Sequential, Model
 from keras.optimizers import Adam, RMSprop, SGD
 
-from skimage.transform import resize
-from skimage.color import rgb2gray
+# from skimage.transform import resize
+# from skimage.color import rgb2gray
 
 STORING_PATH = './results/'
 MODELS_PATH = './trained_models/'

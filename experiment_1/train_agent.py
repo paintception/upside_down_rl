@@ -1,7 +1,7 @@
 import os
 import math
 import time
-import gym
+import gymnasium as gym
 import random
 import utils
 import keras
@@ -53,9 +53,9 @@ class ReplayBuffer():
         return len(self.buffer)
 
 class UpsideDownAgent():
-    def __init__(self, environment, approximator):
-        self.environment = gym.make(environment)
-        self.approximator = approximator
+    def __init__(self, environment, approximator = 'forest'):
+        self.environment = gym.make("CartPole-v1") #gym.make(environment)
+        self.approximator = 'forest' #approximator
         self.state_size = self.environment.observation_space.shape[0]
         self.action_size = self.environment.action_space.n
         self.warm_up_episodes = 50
@@ -100,8 +100,9 @@ class UpsideDownAgent():
             desired_horizon = 1
 
             while not done:
-            
-                state = np.reshape(state, [1, self.state_size]) 
+                
+                state = np.array(state[0])
+                # state = np.reshape(state, [1, self.state_size]) 
                 states.append(state)
 
                 observation = state
@@ -138,6 +139,7 @@ class UpsideDownAgent():
 
             return action
 
+        #TODO: Add other approximators - Focus on the forest; careful with svn
         elif self.approximator in ['forest', 'extra-trees', 'knn', 'svm', 'adaboost']:
             try:
                 input_state = np.concatenate((observation, command), axis=1)
@@ -150,7 +152,8 @@ class UpsideDownAgent():
 
  
     def get_greedy_action(self, observation, command):
-
+        
+        # Baseline
         if self.approximator == 'neural_network':
             action_probs = self.behaviour_function.predict([observation, command])
             action = np.argmax(action_probs)
@@ -171,12 +174,14 @@ class UpsideDownAgent():
                 imp = t.tree_.impurity[branch[0]]
                 for f, i in zip(t.tree_.feature[branch[0]][:-1], imp[:-1]-imp[1:]):
                     feature_importances.setdefault(f, []).append(i) 
-                    
+            
+            #TODO: Check out for other environments
             summed_importances = [sum(feature_importances[0]), sum(feature_importances[1]),
                 sum(feature_importances[2]), sum(feature_importances[3]), sum(feature_importances[4]), sum(feature_importances[5])]
             
             x = np.arange(len(summed_importances))
             
+            #TODO: Plot for other environments 
             plt.figure()
             plt.title('Cartpole-v0')
             plt.bar(x, summed_importances)
@@ -275,6 +280,7 @@ class UpsideDownAgent():
         
         self.testing_rewards.append(score)
 
+        # TODO: Check for desired reward and time steps - Change from task to task
         if testing:
             print('Querying the model ...')
             print('Testing score: {}'.format(score))
@@ -295,7 +301,7 @@ def run_experiment():
 
     approximator = args.approximator
     environment = args.environment
-    seed = args.seed
+    seed = 1 #args.seed
 
     episodes = 500 
     returns = []
@@ -319,7 +325,7 @@ def run_experiment():
 
         exploratory_commands = agent.sample_exploratory_commands()
         
-    agent.generate_episode(environment, 1, 200, 200, True)
+    agent.generate_episode(environment, 1, 200, 200, True) #TODO: Change for testing
 
     utils.save_results(environment, approximator, seed, returns)
     

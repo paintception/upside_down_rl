@@ -256,7 +256,7 @@ class UpsideDownAgent():
         rewards = []
 
         while not done:            
-            state = np.reshape(state, [1, self.state_size])
+            state = state[0] #np.reshape(state, [1, self.state_size])
             states.append(state)
 
             observation = state
@@ -270,7 +270,7 @@ class UpsideDownAgent():
             else:
                 action = self.get_greedy_action(observation, command)
 
-            next_state, reward, done, info = env.step(action)
+            next_state, reward, done, _, _ = env.step(action)
             next_state = np.reshape(next_state, [1, self.state_size])
             
             rewards.append(reward)

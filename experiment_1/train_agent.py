@@ -167,6 +167,12 @@ class UpsideDownAgent():
             return action
 
         else:
+            # Ensure observation and command are at least 2-dimensional
+            if observation.ndim == 1:
+                observation = np.expand_dims(observation, axis=0)
+            if command.ndim == 1:
+                command = np.expand_dims(command, axis=0)
+            
             input_state = np.concatenate((observation, command), axis=1)
             action = self.behaviour_function.predict(input_state)
             

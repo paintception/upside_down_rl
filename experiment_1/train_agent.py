@@ -53,8 +53,8 @@ class ReplayBuffer():
         return len(self.buffer)
 
 class UpsideDownAgent():
-    def __init__(self, environment, approximator = 'forest'):
-        self.environment = gym.make("CartPole-v1") #gym.make(environment)
+    def __init__(self, environment='CartPole-v1', approximator = 'forest'):
+        self.environment = gym.make(environment) #gym.make(environment)
         self.approximator = 'forest' #approximator
         self.state_size = self.environment.observation_space.shape[0]
         self.action_size = self.environment.action_space.n
@@ -70,19 +70,19 @@ class UpsideDownAgent():
         self.return_scale = 0.02
         self.testing_state = 0
 
-        if approximator == 'neural_network':
+        if self.approximator == 'neural_network':
             self.behaviour_function = utils.get_functional_behaviour_function(self.state_size, self.command_size, self.action_size)
         
-        elif approximator == 'forest': 
+        elif self.approximator == 'forest': 
             self.behaviour_function = RandomForestClassifier()
         
-        elif approximator == 'extra-trees':
+        elif self.approximator == 'extra-trees':
             self.behaviour_function = ExtraTreesClassifier()
 
-        elif approximator == 'knn':
+        elif self.approximator == 'knn':
             self.behaviour_function = KNeighborsClassifier()
 
-        elif approximator == 'adaboost':
+        elif self.approximator == 'adaboost':
             self.behaviour_function = AdaBoostClassifier()
 
         self.testing_rewards = []
@@ -114,7 +114,7 @@ class UpsideDownAgent():
                 action = self.get_action(observation, command)
                 actions.append(action)
 
-                next_state, reward, done, info = self.environment.step(action)
+                next_state, reward, done, _, _ = self.environment.step(action)
                 next_state = np.reshape(next_state, [1, self.state_size])
                 
                 rewards.append(reward)
@@ -142,6 +142,12 @@ class UpsideDownAgent():
         #TODO: Add other approximators - Focus on the forest; careful with svn
         elif self.approximator in ['forest', 'extra-trees', 'knn', 'svm', 'adaboost']:
             try:
+                # Ensure observation has at least 2 dimensions
+                observation = observation.reshape(1, -1)
+
+                # # Ensure command[0] has at least 2 dimensions
+                # command_0 = command.reshape(1, -1)
+
                 input_state = np.concatenate((observation, command), axis=1)
                 action = self.behaviour_function.predict(input_state)
                
@@ -237,7 +243,7 @@ class UpsideDownAgent():
 
     def generate_episode(self, environment, e, desired_return, desired_horizon, testing):
        
-        env = gym.make(environment)
+        env = gym.make('CartPole-v1')
         tot_rewards = []
         done = False
         
@@ -299,8 +305,8 @@ def run_experiment():
 
     args = parser.parse_args()
 
-    approximator = args.approximator
-    environment = args.environment
+    approximator = 'forest' #args.approximator
+    environment = 'CartPole-v1' #args.environment
     seed = 1 #args.seed
 
     episodes = 500 

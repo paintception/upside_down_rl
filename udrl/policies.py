@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Dict, Any
+from typing import Dict, Any, Union
 from abc import ABC
 import importlib
 from pickle import dump, load
@@ -17,7 +17,7 @@ class ABCPolicy(ABC):
         state: np.array,
         command: np.array,
         test: bool,
-    ) -> int | np.array: ...
+    ) -> Union[int, np.array]: ...
 
     def train(
         self,

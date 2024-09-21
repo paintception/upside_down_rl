@@ -23,7 +23,7 @@ def run_experiment():
     seed = args.seed
     print(args)
 
-    episodes = 500
+    episodes = 10
     collect_episode = 15
     returns = []
     policy = SklearnPolicy(0.2, "ensemble.RandomForestClassifier")
@@ -48,13 +48,23 @@ def run_experiment():
         # print()
         returns.append(np.mean(tmp_r))
 
-    print(agent.collect_episode(environment, 1, 200, 200, True))
+    final_r = agent.collect_episode(200, 200, test=True)
+    print(f"final result:{final_r}")
 
-    utils.save_results(environment, approximator, seed, returns)
+    agent.policy.save("test_policy")
 
-    if approximator == "neural_network":
-        utils.save_trained_model(environment, seed, agent.behaviour_function)
+    # utils.save_results(environment, approximator, seed, returns)
+
+    # if approximator == "neural_network":
+    #     utils.save_trained_model(environment, seed, agent.behaviour_function)
 
 
 warnings.simplefilter("ignore", DeprecationWarning)
 run_experiment()
+
+
+# pol = SklearnPolicy.load("test_policy")
+
+# agent = UpsideDownAgent(AgentHyper("CartPole-v0", batch_size=0), pol)
+
+# agent.collect_episode(200,200,test=True)

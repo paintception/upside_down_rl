@@ -9,7 +9,30 @@ from udrl.buffer import ReplayBuffer
 
 @dataclass
 class AgentHyper:
-    env: str
+    """Hyperparameters for an agent interacting with an environment.
+
+    Parameters
+    ----------
+    env_name : str
+        Name of the environment the agent interacts with.
+    warm_up : int, optional
+        Number of initial steps before training begins (default: 50).
+    memory_size : int, optional
+        Maximum size of the agent's experience replay memory (default: 700).
+    last_few : int, optional
+        Number of recent experiences to prioritize in training (default: 75).
+    batch_size : int, optional
+        Number of experiences sampled from memory for each training update
+        (default: 32).
+    horizon_scale : float, optional
+        Scaling factor for the horizon length in reinforcement learning
+        (default: 0.02).
+    return_scale : float, optional
+        Scaling factor for rewards or returns in reinforcement learning
+        (default: 0.02).
+    """
+
+    env_name: str
     warm_up: int = 50
     memory_size: int = 700
     last_few: int = 75
@@ -20,9 +43,41 @@ class AgentHyper:
 
 
 class UpsideDownAgent:
+    """An agent that interacts with an environment using an
+    Upside-Down Reinforcement Learning approach.
+
+    Parameters
+    ----------
+    conf : AgentHyper
+        Hyperparameters for the agent.
+    policy : ABCPolicy
+        A policy object used by the agent to select actions.
+
+    Attributes
+    ----------
+    environment : gym.Env
+        The Gym environment the agent interacts with.
+    state_size : int
+        The size of the state space in the environment.
+    memory : ReplayBuffer
+        The replay buffer used to store experiences for training.
+    policy : ABCPolicy
+        The policy object used by the agent to select actions.
+
+    Methods
+    -------
+    collect_episode(desired_return=1, desired_horizon=1, random=False,
+                    store_episode=True, test=False)
+        Collects an episode of experience from the environment.
+    sample_exploratory_commands()
+        Samples exploratory commands based on past experiences.
+    train()
+        Trains the agent's policy using experiences from the replay buffer.
+    """
+
     def __init__(self, conf: AgentHyper, policy: ABCPolicy):
         self.conf = conf
-        self.environment = gym.make(conf.env)
+        self.environment = gym.make(conf.env_name)
         self.state_size = self.environment.observation_space.shape[0]
         self.memory = ReplayBuffer(conf.memory_size)
         self.policy = policy
@@ -44,16 +99,12 @@ class UpsideDownAgent:
 
         while not (tru or ter):
             state = np.expand_dims(state, axis=0)
-
-            # interesting continuous scaling -> goes to 0 pretty fast
-            # wanted ?
             command = np.array(
                 [
                     desired_return * self.conf.return_scale,
                     desired_horizon * self.conf.horizon_scale,
                 ]
             )
-
             command = np.expand_dims(command, axis=0)
             action = (
                 self.environment.action_space.sample()
@@ -108,7 +159,7 @@ class UpsideDownAgent:
             action = episode["actions"][t1]
 
             training_states[idx] = state[0]
-            training_commands[idx] = np.asarray(
+            training_commands[idx] = np.array(
                 [
                     desired_return * self.conf.return_scale,
                     desired_horizon * self.conf.horizon_scale,

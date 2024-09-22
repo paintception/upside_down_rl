@@ -3,7 +3,7 @@ import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from udrl.agent import UpsideDownAgent, AgentHyper
-from udrl.policies import SklearnPolicy
+from udrl.policies import SklearnPolicy, NeuralPolicy
 from dataclasses import dataclass, asdict
 import gymnasium as gym
 from tqdm import trange
@@ -30,7 +30,8 @@ class UDRLExperiment:
     )
     estimator_name: str = with_meta(
         "ensemble.RandomForestClassifier",
-        "Fully qualified name of the scikit-learn estimator class "
+        "neural for the NN or a fully qualified name of the "
+        "scikit-learn estimator class "
         "for the policy",
     )
     seed: int = with_meta(42, "Random seed for reproducibility")
@@ -107,11 +108,17 @@ def run_experiment(conf: UDRLExperiment):
     * Optionally performs final testing,saves the policy and learning rewards.
     """
     toy_env = gym.make(conf.env_name)
-    policy = SklearnPolicy(
-        epsilon=conf.epsilon,
-        estimator_name=conf.estimator_name,
-        action_size=toy_env.action_space.n,
-    )
+    if conf.estimator_name == "neural":
+        policy = NeuralPolicy(
+            toy_env.observation_space.shape[0],
+            action_size=toy_env.action_space.n,
+        )
+    else:
+        policy = SklearnPolicy(
+            epsilon=conf.epsilon,
+            estimator_name=conf.estimator_name,
+            action_size=toy_env.action_space.n,
+        )
     agent = UpsideDownAgent(
         conf=apply(AgentHyper, asdict(conf)),
         policy=policy,
@@ -161,6 +168,7 @@ warnings.simplefilter("ignore", DeprecationWarning)
 warnings.simplefilter("ignore", FutureWarning)
 parser = argparse.ArgumentParser(
     description="Runs an Upside-Down Reinforcement Learning experiment."
+    "NOTE: Default values are for the CartPole env with RandomForestClassifier"
 )
 arguments = create_argparse_dict(UDRLExperiment)
 for k, v in arguments.items():

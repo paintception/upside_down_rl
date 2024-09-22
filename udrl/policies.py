@@ -237,7 +237,7 @@ class NeuralPolicy(ABCPolicy):
         )
         model.compile(
             loss="categorical_crossentropy",
-            optimizer=Adam(lr=0.001),
+            optimizer=Adam(learning_rate=0.001),
         )
         self.estimator = model
 
@@ -247,7 +247,7 @@ class NeuralPolicy(ABCPolicy):
         command: np.array,
         test: bool,
     ):
-        action_probs = self.estimator.predict([state, command])
+        action_probs = self.estimator.predict([state, command], verbose=0)
         if test:
             return np.argmax(action_probs)
         return np.random.choice(
@@ -261,4 +261,4 @@ class NeuralPolicy(ABCPolicy):
         commands: np.array,
         actions: np.array,
     ):
-        self.estimator([states, commands], actions, verbose=0)
+        self.estimator.fit([states, commands], actions, verbose=0)

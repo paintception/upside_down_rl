@@ -25,18 +25,18 @@ You can run the experiment with various configuration options using the command 
 poetry run python -m udrl [options]
 ```
 **Note** If you are already inside a virtual env `python -m udrl [options]` is enough
-
+**Note** All defaults are for the CartPole-v0
 Available options include:
 
 * `--env_name`: Name of the Gym environment (default: `CartPole-v0`)
-* `--estimator_name`: Fully qualified name of the scikit-learn estimator class (default: `ensemble.RandomForestClassifier`)
+* `--estimator_name`: "neural" for NN or a fully qualified name of the scikit-learn estimator class (default: `ensemble.RandomForestClassifier`)
 * `--seed`: Random seed (default: `42`)
 * `--max_episode`: Maximum training episodes (default: `500`)
 * `--collect_episode`: Episodes to collect between training (default: `15`)
 * `--batch_size`: Batch size for training (default: `0`, uses entire replay buffer)
 * Other options related to warm-up, memory size, exploration, testing, saving, etc.
 
-**NOTE** NeuralPolicy is not yet available from the main experiment since it was not tested yet. Moreover only Cartpole env was tested
+**NOTE** Cartpole, Acrobot and Mountain car envs were tested
 
 ### Result Data
 

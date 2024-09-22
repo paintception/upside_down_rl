@@ -56,3 +56,9 @@ Available options include:
 * `udrl`: Contains the main Python modules for the UDRL agent.
 
 Please refer to the code and comments for further details on the implementation.
+
+
+
+## Troubleshooting
+
+If you encounter any errors during installation or execution, or if you have any questions about the project, feel free to reach out to me at [massimiliano@falzari.dev](mailto:massimiliano@falzari.dev). I'll be happy to assist you!

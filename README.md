@@ -6,6 +6,7 @@ This project implements an Upside-Down Reinforcement Learning (UDRL) agent.
 ### Installation
 
 1. Make sure you have Python 3.10 installed. You can check your version with `python --version`.
+   **NOTE**  Use a virtual env to avoid dependency clash
 2. Install the project dependencies using Poetry:
    ```bash
    poetry install

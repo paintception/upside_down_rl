@@ -7,12 +7,12 @@ from pickle import dump, load
 
 from sklearn.exceptions import NotFittedError
 from sklearn.base import BaseEstimator
+from sklearn.metrics import classification_report
 import numpy as np
 
-import keras
-from keras.layers import Dense, Multiply
-from keras.models import Model
-from keras.optimizers import Adam
+import torch
+from torch import nn
+from torch.distributions import Categorical
 
 
 class ABCPolicy(ABC):
@@ -53,6 +53,7 @@ class ABCPolicy(ABC):
         -------
         Dict[str, Any]
             A dictionary containing training metrics or other  information.
+            It MUST contain the key "metric"
 
     save(path)
         Saves the policy to the specified path.
@@ -154,8 +155,7 @@ class SklearnPolicy(ABCPolicy):
 
         if not test and (actions is None or np.random.rand() <= self.epsilon):
             return np.random.choice(self.action_size)
-
-        return np.argmax(actions) if len(actions.shape) == 2 else actions[0]
+        return actions[0]
 
     def train(
         self,
@@ -163,12 +163,12 @@ class SklearnPolicy(ABCPolicy):
         commands: np.array,
         actions: np.array,
     ):
-        input_classifier = np.concatenate((states, commands), axis=1)
-
-        try:
-            self.estimator.fit(input_classifier, actions)
-        except ValueError:
-            self.estimator.fit(input_classifier, np.argmax(actions, axis=1))
+        input_state = np.concatenate((states, commands), axis=1)
+        self.estimator.fit(input_state, actions)
+        pred = self.estimator.predict(input_state)
+        report = classification_report(actions, pred, output_dict=True)
+        report["metric"] = report["accuracy"]
+        return report
 
     def save(self, path: str):
         with open(path + ".pkl", "wb") as f:
@@ -180,66 +180,133 @@ class SklearnPolicy(ABCPolicy):
         return policy
 
 
-@dataclass
-class NeuralPolicy(ABCPolicy):
-    """A policy implemented using a neural network for action selection.
+class BehaviorNet(nn.Module):
+    """
+    A neural network module designed to model agent behavior based on state
+    and command inputs.
 
     Parameters
     ----------
     state_size : int
-        The size of the state space in the environment.
+        Dimensionality of the state input.
+    action_size : int
+        Dimensionality of the action output.
+    command_size : int
+        Dimensionality of the command input.
+    hidden_size : int, optional
+        Number of neurons in the hidden layers. Defaults to 64.
+
+    Returns
+    -------
+    torch.Tensor
+        A probability distribution over actions,
+        shaped (batch_size, action_size).
+    """
+
+    def __init__(
+        self,
+        state_size: int,
+        action_size: int,
+        command_size: int,
+        hidden_size: int = 64,
+    ):
+        super().__init__()
+        self.state_entry = nn.Sequential(
+            nn.Linear(state_size, hidden_size), nn.Sigmoid()
+        )
+        self.command_entry = nn.Sequential(
+            nn.Linear(command_size, hidden_size), nn.Sigmoid()
+        )
+        self.model = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, action_size),
+            nn.Softmax(dim=-1),
+        )
+
+    def forward(self, state, command):
+        state_out = self.state_entry(state)
+        command_out = self.command_entry(command)
+        out = state_out * command_out
+        return self.model(out)
+
+
+@dataclass
+class NeuralPolicy(ABCPolicy):
+    """
+    A policy that uses a neural network to map states and commands to actions.
+
+    Parameters
+    ----------
+    state_size : int
+        The dimensionality of the state input.
+    action_size : int
+        The dimensionality of the action output.
     command_size : int, optional
-        The size of the command or goal vector (default: 2).
-    action_size : int, optional
-        The number of possible actions in the environment (default: 2).
+        The dimensionality of the command input. Defaults to 2.
+    hidden_size : int, optional
+        The number of neurons in the hidden layers of the neural network.
+        Defaults to 64.
+    device : str, optional
+        The device on which to run the neural network.
+        Can be "auto" (to automatically select CUDA if available, else CPU),
+        or a valid torch device string. Defaults to "auto".
+    loss : nn.Module, optional
+        The loss function class used for training.
+        Defaults to `nn.CrossEntropyLoss`.
 
     Attributes
     ----------
-    estimator : keras.Model
-        The compiled Keras neural network model.
+    estimator : nn.Module
+        The neural network used to estimate the action probabilities.
+    loss : nn.Module
+        The instantiated loss function used for training.
+    optim : torch.optim.Adam
+        The optimizer used for training.
 
     Methods
     -------
     __call__(state, command, test)
-        Selects an action based on the given state and command using the
-        neural network. During testing, the action with the highest
-        probability is chosen; otherwise, an action is sampled according
-        to the predicted probabilities.
+        Selects an action based on the given state and command
 
     train(states, commands, actions)
-        Trains the neural network using the provided experiences.
+        Trains the estimator using the provided experiences.
+
+    save(path)
+        Saves the policy.
+
+    load(path)
+        Loads the policy.
     """
 
     state_size: int
+    action_size: int
     command_size: int = 2
-    action_size: int = 2
-    estimator: BaseEstimator = field(init=False)
+    hidden_size: int = 64
+    # NOTE GPU maybe be drastically slower for small batch_size
+    device: str = "cpu"
+    loss: nn.Module = nn.CrossEntropyLoss
+    estimator: nn.Module = field(init=False)
 
     def __post_init__(self):
-
-        observation_input = keras.Input(shape=(self.state_size,))
-        linear_layer = Dense(64, activation="sigmoid")(observation_input)
-
-        command_input = keras.Input(shape=(self.command_size,))
-        sigmoidal_layer = Dense(64, activation="sigmoid")(command_input)
-
-        multiplied_layer = Multiply()([linear_layer, sigmoidal_layer])
-
-        layer_1 = Dense(64, activation="relu")(multiplied_layer)
-        layer_2 = Dense(64, activation="relu")(layer_1)
-        layer_3 = Dense(64, activation="relu")(layer_2)
-        layer_4 = Dense(64, activation="relu")(layer_3)
-        final_layer = Dense(self.action_size, activation="softmax")(layer_4)
-
-        model = Model(
-            inputs=[observation_input, command_input],
-            outputs=final_layer,
+        self.estimator = BehaviorNet(
+            self.state_size,
+            self.action_size,
+            self.command_size,
+            self.hidden_size,
         )
-        model.compile(
-            loss="categorical_crossentropy",
-            optimizer=Adam(learning_rate=0.001),
-        )
-        self.estimator = model
+        if self.device == "auto":
+            self.device = torch.device(
+                "cuda" if torch.cuda.is_available() else "cpu"
+            )
+        self.estimator.to(self.device)
+
+        self.loss = self.loss()
+        self.optim = torch.optim.Adam(self.estimator.parameters())
 
     def __call__(
         self,
@@ -247,13 +314,12 @@ class NeuralPolicy(ABCPolicy):
         command: np.array,
         test: bool,
     ):
-        action_probs = self.estimator.predict([state, command], verbose=0)
+        state = torch.FloatTensor(state).to(self.device)
+        command = torch.FloatTensor(command).to(self.device)
+        action_probs = self.estimator(state, command)
         if test:
-            return np.argmax(action_probs)
-        return np.random.choice(
-            np.arange(0, self.action_size),
-            p=action_probs[0],
-        )
+            return torch.argmax(action_probs).item()
+        return Categorical(action_probs).sample().item()
 
     def train(
         self,
@@ -261,4 +327,38 @@ class NeuralPolicy(ABCPolicy):
         commands: np.array,
         actions: np.array,
     ):
-        self.estimator.fit([states, commands], actions, verbose=0)
+        states = torch.FloatTensor(states).to(self.device)
+        commands = torch.FloatTensor(commands).to(self.device)
+        actions = torch.LongTensor(actions).to(self.device)
+
+        pred = self.estimator(states, commands)
+        self.optim.zero_grad()
+        loss = self.loss(pred, actions)
+        loss.backward()
+        self.optim.step()
+        return {"metric": loss.item()}
+
+    def save(self, path: str):
+        torch.save(
+            {
+                "model": self.estimator.state_dict(),
+                "optim": self.optim.state_dict(),
+                "state_size": self.state_size,
+                "action_size": self.action_size,
+                "command_size": self.command_size,
+                "hidden_size": self.hidden_size,
+            },
+            path + ".pth",
+        )
+
+    def load(path: str):
+        saved_dict = torch.load(path + ".pth")
+        policy = NeuralPolicy(
+            saved_dict["state_size"],
+            saved_dict["action_size"],
+            saved_dict["command_size"],
+            saved_dict["hidden_size"],
+        )
+        policy.estimator.load_state_dict(saved_dict["model"])
+        policy.optim.load_state_dict(saved_dict["optim"])
+        return policy

@@ -1,7 +1,3 @@
-import os
-
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
 from udrl.agent import UpsideDownAgent, AgentHyper
 from udrl.policies import SklearnPolicy, NeuralPolicy
 from dataclasses import dataclass, asdict
@@ -37,8 +33,11 @@ class UDRLExperiment:
     seed: int = with_meta(42, "Random seed for reproducibility")
 
     max_episode: int = with_meta(500, "Maximum number of training episodes ")
-    collect_episode: int = with_meta(
+    collect_iter: int = with_meta(
         15, "Number of episodes to collect between training steps "
+    )
+    train_per_iter: int = with_meta(
+        100, "Number of train iteration for each collected episode "
     )
     batch_size: int = with_meta(
         0,
@@ -51,8 +50,11 @@ class UDRLExperiment:
     )
     memory_size: int = with_meta(700, "Maximum size of the replay buffer")
     last_few: int = with_meta(
-        75,
+        50,
         "Number of recent episodes to consider for exploratory command sampling",
+    )
+    testing_period: int = with_meta(
+        10, "After how many training loop we perform the testing of the agent"
     )
 
     horizon_scale: float = with_meta(
@@ -79,8 +81,8 @@ class UDRLExperiment:
         200, "Desired horizon for final testing episodes "
     )
     save_policy: bool = with_meta(True, "Whether to save the trained policy ")
-    save_learning_rewards: bool = with_meta(
-        True, "Whether to save the learning rewards during training"
+    save_learning_infos: bool = with_meta(
+        True, "Whether to save the learning infos"
     )
 
 
@@ -105,7 +107,7 @@ def run_experiment(conf: UDRLExperiment):
     -----
     * Trains an agent using the specified policy and environment.
     * Collects episodes of experience and updates the policy.
-    * Optionally performs final testing,saves the policy and learning rewards.
+    * Optionally performs final testing,saves the policy and learning infos.
     """
     toy_env = gym.make(conf.env_name)
     if conf.estimator_name == "neural":
@@ -126,19 +128,50 @@ def run_experiment(conf: UDRLExperiment):
     epi_bar = trange(conf.max_episode)
 
     returns = []
+    test_returns = []
+    infos = []
+    test_reward_mean = 0
+    test_reward_std = 0
     for e in epi_bar:
-        agent.train()
+        metric = []
+        for _ in range(conf.train_per_iter):
+            info = agent.train()
+            metric.append(info["metric"])
+            infos.append(info)
+
         episodic_rewards = [
             agent.collect_episode(*agent.sample_exploratory_commands())
-            for _ in range(conf.collect_episode)
+            for _ in range(conf.collect_iter)
         ]
         ep_r_mean = np.mean(episodic_rewards)
         ep_r_std = np.std(episodic_rewards)
-        epi_bar.set_postfix({"mean": ep_r_mean, "std": ep_r_std})
         returns.append((ep_r_mean, ep_r_std))
 
+        if e % conf.testing_period == 0:
+            test_reward = [
+                agent.collect_episode(
+                    conf.final_desired_return,
+                    conf.final_desired_horizon,
+                    test=True,
+                    store_episode=False,
+                )
+                for _ in range(conf.final_testing_sample)
+            ]
+            test_reward_mean = np.mean(test_reward)
+            test_reward_std = np.std(test_reward)
+            test_returns.append((test_reward_mean, test_reward_std))
+
+        epi_bar.set_postfix(
+            {
+                "mean": test_reward_mean,
+                "std": test_reward_std,
+                "mean_m": np.mean(metric),
+                "std_m": np.std(metric),
+            }
+        )
+
     exp_name = dataclass_non_defaults_to_string(conf)
-    base_path = Path("data") / conf.env_name / str(conf.seed) / exp_name
+    base_path = Path("data") / conf.env_name / exp_name / str(conf.seed)
     base_path.mkdir(parents=True, exist_ok=True)
     final_res = {}
     if conf.final_testing:
@@ -160,8 +193,10 @@ def run_experiment(conf: UDRLExperiment):
     if conf.save_policy:
         agent.policy.save(str(base_path / "policy"))
 
-    if conf.save_learning_rewards:
-        np.save(str(base_path / "rewards.npy"), returns)
+    if conf.save_learning_infos:
+        np.save(str(base_path / "train_rewards.npy"), returns)
+        np.save(str(base_path / "test_rewards.npy"), test_returns)
+        dump_dict(infos, str(base_path / "learning_infos.json"))
 
 
 warnings.simplefilter("ignore", DeprecationWarning)

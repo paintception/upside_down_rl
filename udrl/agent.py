@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 import gymnasium as gym
 import numpy as np
-import keras
+
+# import keras
 
 from udrl.policies import ABCPolicy
 from udrl.buffer import ReplayBuffer
@@ -117,9 +118,10 @@ class UpsideDownAgent:
             cum_rew += reward
 
             state = next_state
-            desired_return -= reward  # Line 8 Algorithm 2
-            desired_horizon -= 1  # Line 9 Algorithm 2
-            desired_horizon = np.maximum(desired_horizon, 1)
+            # Line 8 Algorithm 2
+            desired_return -= reward
+            # Line 9 Algorithm 2
+            desired_horizon = max(desired_horizon - 1, 1)
         if store_episode:
             self.memory.add_sample(*list(zip(*epochs)))
         return cum_rew
@@ -150,7 +152,8 @@ class UpsideDownAgent:
         for idx, episode in enumerate(random_episodes):
             T = len(episode["states"])
             t1 = np.random.randint(0, T - 1)
-            t2 = np.random.randint(t1 + 1, T)
+            # t2 = np.random.randint(t1 + 1, T)
+            t2 = T
 
             state = episode["states"][t1]
             desired_return = sum(episode["rewards"][t1:t2])
@@ -167,8 +170,7 @@ class UpsideDownAgent:
             )
             actions.append(action)
 
-        actions = keras.utils.to_categorical(actions)
-        self.policy.train(training_states, training_commands, actions)
+        return self.policy.train(training_states, training_commands, actions)
 
 
 #

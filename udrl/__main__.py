@@ -15,6 +15,8 @@ from udrl.cli import (
 )
 from pathlib import Path
 import json
+import torch
+import random as rnd
 
 
 @dataclass
@@ -50,7 +52,7 @@ class UDRLExperiment:
     )
     memory_size: int = with_meta(700, "Maximum size of the replay buffer")
     last_few: int = with_meta(
-        50,
+        75,
         "Number of recent episodes to consider for exploratory command sampling",
     )
     testing_period: int = with_meta(
@@ -109,6 +111,10 @@ def run_experiment(conf: UDRLExperiment):
     * Collects episodes of experience and updates the policy.
     * Optionally performs final testing,saves the policy and learning infos.
     """
+    torch.manual_seed(conf.seed)
+    np.random.seed(conf.seed)
+    rnd.seed(conf.seed)
+
     toy_env = gym.make(conf.env_name)
     if conf.estimator_name == "neural":
         policy = NeuralPolicy(

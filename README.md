@@ -36,13 +36,13 @@ Available options include:
 * `--batch_size`: Batch size for training (default: `0`, uses entire replay buffer)
 * Other options related to warm-up, memory size, exploration, testing, saving, etc.
 
-**NOTE** Cartpole, Acrobot and Mountain car envs were tested
+**NOTE** Cartpole, Acrobot, Mountain car and LunarLander envs were tested
 
 ### Result Data
 
-* Experiment configuration and final test results are saved in a JSON file (`conf.json`) within a directory structure based on the environment, seed, and non-default configuration values (e.g., `data/CartPole-v0/42/[experiment_name]/conf.json`).
+* Experiment configuration and final test results are saved in a JSON file (`conf.json`) within a directory structure based on the environment, seed, and non-default configuration values (e.g., `data/[env-name]/[experiment_name]/[seed]/conf.json`).
 * If `save_policy` is True, the trained policy is saved in the same directory (`policy`).
-* If `save_learning_rewards` is True, learning rewards during training are saved as a NumPy file (`rewards.npy`) in the same directory.
+* If `save_learning_infos` is True, learning infos and rewards  during training are saved as a NumPy file (e.g.`test_rewards.npy`) and a json file (e.h.`learning_infos.json`) in the same directory.
 
 ### Process Data
 * A base post processing is available to convert the results data in csvs run it as `python -m udrl.data_proc`

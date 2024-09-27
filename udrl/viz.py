@@ -87,12 +87,9 @@ def visualize_environment(
 
         font = pygame.font.Font(None, 30)
         what = f"Importance  {i}"
-        print(len(feature_importances))
         if len(feature_importances) - i == 2:
-            print("ti")
             what = "Desired Return"
         if len(feature_importances) - i == 1:
-            print("mona")
             what = "Desired Horizon"
 
         text = font.render(

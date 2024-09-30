@@ -4,6 +4,7 @@ import numpy as np
 from udrl.policies import SklearnPolicy
 from udrl.agent import UpsideDownAgent, AgentHyper
 from pathlib import Path
+import json
 
 
 def normalize_value(value, is_bounded, low=None, high=None):
@@ -112,19 +113,38 @@ def visualize_environment(
         (120, screen_height - 60),
         (button_width, button_height),
     )
+    next_button, next_text, next_text_rect = create_button(
+        "Next", (230, screen_height - 60), (button_width, button_height)
+    )
+    save_button, save_text, save_text_rect = create_button(
+        "Save", (340, screen_height - 60), (button_width, button_height)
+    )
 
     pygame.draw.rect(screen, (200, 200, 200), reset_button)
     pygame.draw.rect(screen, (200, 200, 200), pause_play_button)
+    pygame.draw.rect(screen, (200, 200, 200), next_button)
+    pygame.draw.rect(screen, (200, 200, 200), save_button)
     screen.blit(reset_text, reset_text_rect)
     screen.blit(pause_play_text, pause_play_text_rect)
+    screen.blit(next_text, next_text_rect)
+    screen.blit(save_text, save_text_rect)
 
     pygame.display.flip()
-    return reset_button, pause_play_button
+    return reset_button, pause_play_button, next_button, save_button
 
 
 def run_visualization(
-    env_name, agent, init_desired_return, init_desired_horizon, max_epoch
+    env_name,
+    agent,
+    init_desired_return,
+    init_desired_horizon,
+    max_epoch,
+    base_path,
 ):
+    base_path = (
+        Path(base_path) / env_name / agent.policy.estimator.__str__()[:-2]
+    )
+    base_path.mkdir(parents=True, exist_ok=True)
     desired_return = init_desired_return
     desired_horizon = init_desired_horizon
 
@@ -137,14 +157,16 @@ def run_visualization(
 
     clock = pygame.time.Clock()
     epoch = 0
+    save_index = 0
 
     running = True
     paused = False
+    step = False
     while running:
 
         env_render = env.render()
         env_surface = pygame.surfarray.make_surface(env_render.swapaxes(0, 1))
-        if not paused:
+        if not paused or step:
             command = np.array(
                 [
                     desired_return * agent.conf.return_scale,
@@ -184,15 +206,17 @@ def run_visualization(
 
             epoch += 1
 
-        reset_button, pause_play_button = visualize_environment(
-            screen,
-            state,
-            env,
-            env_surface,
-            paused,
-            summed_importances,
-            epoch,
-            max_epoch,
+        reset_button, pause_play_button, next_button, save_button = (
+            visualize_environment(
+                screen,
+                state,
+                env,
+                env_surface,
+                paused,
+                summed_importances,
+                epoch,
+                max_epoch,
+            )
         )
 
         if done or truncated:
@@ -201,6 +225,7 @@ def run_visualization(
             desired_return = init_desired_return
             epoch = 0
 
+        step = False
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -213,7 +238,37 @@ def run_visualization(
                     epoch = 0
                 elif pause_play_button.collidepoint(event.pos):
                     paused = not paused
+                elif (
+                    next_button.collidepoint(event.pos) and paused
+                ):  # Only when paused
+                    step = True
+                elif save_button.collidepoint(event.pos):
+                    pygame.image.save(
+                        env_surface,
+                        str(base_path / f"env_image_{save_index}.png"),
+                    )
+                    with open(
+                        str(base_path / f"info_{save_index}.json"), "w"
+                    ) as f:
+                        json.dump(
+                            {
+                                "state": {
+                                    i: str(val) for i, val in enumerate(state)
+                                },
+                                "feature": {
+                                    i: str(val)
+                                    for i, val in enumerate(summed_importances)
+                                },
+                                "action": str(action),
+                                "reward": str(reward),
+                                "desired_return": str(desired_return + reward),
+                                "desired_horizon": str(desired_horizon + 1),
+                            },
+                            f,
+                            indent=4,
+                        )
 
+                    save_index += 1
         clock.tick(5)
 
     env.close()
@@ -224,11 +279,11 @@ base_path = Path("data")
 # env = "CartPole-v0"
 # env = "Acrobot-v1"
 env = "LunarLander-v2"
-estimator = "ExtraTreesClassifier"
+estimator = "RandomForestClassifier"
 seed = str(42)
-conf_name = "estimator_nameensemble.ExtraTreesClassifier_train_per_iter1"
+conf_name = "train_per_iter1"
 desired_return = 200
-desired_horizon = 200
+desired_horizon = 100
 max_epoch = 200
 
 path = base_path / env / conf_name / seed
@@ -243,4 +298,6 @@ hyper = AgentHyper(
 
 agent = UpsideDownAgent(hyper, policy)
 
-run_visualization(env, agent, desired_return, desired_horizon, max_epoch)
+run_visualization(
+    env, agent, desired_return, desired_horizon, max_epoch, "data/viz_examples"
+)

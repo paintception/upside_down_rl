@@ -2,8 +2,7 @@ from dataclasses import dataclass
 import gymnasium as gym
 import numpy as np
 
-# import keras
-
+from udrl.catch import CatchAdaptor
 from udrl.policies import ABCPolicy
 from udrl.buffer import ReplayBuffer
 
@@ -78,7 +77,11 @@ class UpsideDownAgent:
 
     def __init__(self, conf: AgentHyper, policy: ABCPolicy):
         self.conf = conf
-        self.environment = gym.make(conf.env_name)
+        self.environment = (
+            CatchAdaptor(dense=True)
+            if conf.env_name == "catch"
+            else gym.make(conf.env_name)
+        )
         self.state_size = self.environment.observation_space.shape[0]
         self.memory = ReplayBuffer(conf.memory_size)
         self.policy = policy
@@ -95,6 +98,8 @@ class UpsideDownAgent:
     ):
         state, _ = self.environment.reset()
         epochs = []
+        horizons = []
+        returns = []
         cum_rew = 0
         tru, ter = False, False
 
@@ -116,6 +121,8 @@ class UpsideDownAgent:
 
             epochs.append([state, action, reward])
             cum_rew += reward
+            horizons.append(desired_horizon)
+            returns.append(desired_return)
 
             state = next_state
             # Line 8 Algorithm 2
@@ -124,7 +131,7 @@ class UpsideDownAgent:
             desired_horizon = max(desired_horizon - 1, 1)
         if store_episode:
             self.memory.add_sample(*list(zip(*epochs)))
-        return cum_rew
+        return cum_rew, returns, horizons
 
     def sample_exploratory_commands(self):
         best_ep = self.memory.get_n_best(self.conf.last_few)

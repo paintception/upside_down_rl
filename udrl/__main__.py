@@ -1,5 +1,6 @@
 from udrl.agent import UpsideDownAgent, AgentHyper
 from udrl.policies import SklearnPolicy, NeuralPolicy
+from udrl.catch import CatchAdaptor
 from dataclasses import dataclass, asdict
 import gymnasium as gym
 from tqdm import trange
@@ -67,7 +68,10 @@ class UDRLExperiment:
     )
 
     epsilon: float = with_meta(
-        0.2, "Exploration rate for epsilon-greedy action selection "
+        0.2, "Exploration rate for epsilon-greedy action selection"
+    )
+    save_desired: bool = with_meta(
+        False, "Save desired_horizon and desired_return during training"
     )
 
     final_testing: bool = with_meta(
@@ -115,7 +119,11 @@ def run_experiment(conf: UDRLExperiment):
     np.random.seed(conf.seed)
     rnd.seed(conf.seed)
 
-    toy_env = gym.make(conf.env_name)
+    toy_env = (
+        CatchAdaptor(dense=True)
+        if conf.env_name == "catch"
+        else gym.make(conf.env_name)
+    )
     if conf.estimator_name == "neural":
         policy = NeuralPolicy(
             toy_env.observation_space.shape[0],
@@ -136,6 +144,8 @@ def run_experiment(conf: UDRLExperiment):
     returns = []
     test_returns = []
     infos = []
+    desired_returns = []
+    desired_horizons = []
     test_reward_mean = 0
     test_reward_std = 0
     for e in epi_bar:
@@ -145,10 +155,15 @@ def run_experiment(conf: UDRLExperiment):
             metric.append(info["metric"])
             infos.append(info)
 
-        episodic_rewards = [
-            agent.collect_episode(*agent.sample_exploratory_commands())
-            for _ in range(conf.collect_iter)
-        ]
+        episodic_rewards = []
+        for _ in range(conf.collect_iter):
+            r, dr, dh = agent.collect_episode(
+                *agent.sample_exploratory_commands()
+            )
+            episodic_rewards.append(r)
+            desired_returns.extend(dr)
+            desired_horizons.extend(dh)
+
         ep_r_mean = np.mean(episodic_rewards)
         ep_r_std = np.std(episodic_rewards)
         returns.append((ep_r_mean, ep_r_std))
@@ -160,7 +175,7 @@ def run_experiment(conf: UDRLExperiment):
                     conf.final_desired_horizon,
                     test=True,
                     store_episode=False,
-                )
+                )[0]
                 for _ in range(conf.final_testing_sample)
             ]
             test_reward_mean = np.mean(test_reward)
@@ -188,7 +203,7 @@ def run_experiment(conf: UDRLExperiment):
                 conf.final_desired_horizon,
                 test=True,
                 store_episode=False,
-            )
+            )[0]
             for _ in trange(conf.final_testing_sample)
         ]
         final_res["test_mean"] = np.mean(final_r)
@@ -202,6 +217,8 @@ def run_experiment(conf: UDRLExperiment):
     if conf.save_learning_infos:
         np.save(str(base_path / "train_rewards.npy"), returns)
         np.save(str(base_path / "test_rewards.npy"), test_returns)
+        np.save(str(base_path / "desired_returns.npy"), desired_returns)
+        np.save(str(base_path / "desired_horizons.npy"), desired_horizons)
         dump_dict(infos, str(base_path / "learning_infos.json"))
 
 

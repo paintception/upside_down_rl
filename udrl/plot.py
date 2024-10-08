@@ -1,5 +1,5 @@
-from udrl.policies import SklearnPolicy
-from udrl.agent import UpsideDownAgent, AgentHyper
+from .policies import SklearnPolicy
+from .agent import UpsideDownAgent, AgentHyper
 from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
@@ -139,12 +139,12 @@ def create_gif_from_plots(
 
 
 base_path = Path("data")
-env = "Acrobot-v1"
+env = "CartPole-v0"
 estimator = "ExtraTreesClassifier"
 seed = str(42)
 conf_name = "estimator_nameensemble.ExtraTreesClassifier_train_per_iter1"
-desired_return = -100
-desired_horizon = 100
+desired_return = 200
+desired_horizon = 200
 
 path = base_path / env / conf_name / seed
 
@@ -160,3 +160,30 @@ image_filenames = [
 ]
 
 create_gif_from_plots(image_filenames)
+
+
+# import numpy as np
+# import matplotlib.pyplot as plt
+# from sklearn.cluster import KMeans, HDBSCAN
+# from sklearn.decomposition import PCA
+
+# # Assuming you have your data in a numpy array 'data'
+# data = np.array(res)[:, :, 0]
+
+# # 1. Apply K-Means clustering
+# kmeans = HDBSCAN()
+# kmeans.fit(data)
+# labels = kmeans.labels_
+
+# # 2. Dimensionality Reduction for visualization (PCA)
+# pca = PCA(n_components=2)  # Reduce to 2 dimensions for plotting
+# data_pca = pca.fit_transform(data)
+
+# # 3. Plotting
+# plt.figure(figsize=(10, 8))
+# plt.scatter(data_pca[:, 0], data_pca[:, 1], c=labels, cmap="viridis")
+# plt.title("K-Means Clustering Visualization")
+# plt.xlabel("Principal Component 1")
+# plt.ylabel("Principal Component 2")
+# plt.colorbar()
+# plt.show()

@@ -1,8 +1,8 @@
 import gymnasium as gym
 import pygame
 import numpy as np
-from udrl.policies import SklearnPolicy
-from udrl.agent import UpsideDownAgent, AgentHyper
+from .policies import SklearnPolicy
+from .agent import UpsideDownAgent, AgentHyper
 from pathlib import Path
 import json
 
@@ -182,13 +182,16 @@ def run_visualization(
 
             state, reward, done, truncated, info = env.step(action)
 
-            feature_importances = {}
+            feature_importances = {
+                idx: [] for idx in range(ext_state.shape[1])
+            }
 
             for t in agent.policy.estimator.estimators_:
                 branch = np.array(
                     t.decision_path(ext_state).todense(), dtype=bool
                 )
                 imp = t.tree_.impurity[branch[0]]
+
                 for f, i in zip(
                     t.tree_.feature[branch[0]][:-1], imp[:-1] - imp[1:]
                 ):
@@ -200,7 +203,7 @@ def run_visualization(
             desired_horizon = max(desired_horizon - 1, 1)
 
             summed_importances = [
-                sum(feature_importances[k])
+                sum(feature_importances.get(k, [0.001]))
                 for k in range(len(feature_importances.keys()))
             ]
 
@@ -275,16 +278,20 @@ def run_visualization(
     pygame.quit()
 
 
+# LunarLander-v2:RT:43:r.57:h.102 -> -92.03 +- 81.51,max 36.37,min -327.94
+# Acrobot-v1:RT:44:r.-79:h.82 -> -79.00 +- 47.01,max -64.00,min -500.00
+
+
 base_path = Path("data")
 # env = "CartPole-v0"
-# env = "Acrobot-v1"
-env = "LunarLander-v2"
+env = "Acrobot-v1"
+# env = "LunarLander-v2"
 estimator = "RandomForestClassifier"
-seed = str(42)
+seed = str(44)
 conf_name = "train_per_iter1"
-desired_return = 200
-desired_horizon = 100
-max_epoch = 200
+desired_return = -79
+desired_horizon = 82
+max_epoch = 500
 
 path = base_path / env / conf_name / seed
 

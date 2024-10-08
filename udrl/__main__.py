@@ -1,6 +1,6 @@
-from udrl.agent import UpsideDownAgent, AgentHyper
-from udrl.policies import SklearnPolicy, NeuralPolicy
-from udrl.catch import CatchAdaptor
+from .agent import UpsideDownAgent, AgentHyper
+from .policies import SklearnPolicy, NeuralPolicy
+from .catch import CatchAdaptor
 from dataclasses import dataclass, asdict
 import gymnasium as gym
 from tqdm import trange

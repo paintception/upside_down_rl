@@ -2,9 +2,9 @@ from dataclasses import dataclass
 import gymnasium as gym
 import numpy as np
 
-from udrl.catch import CatchAdaptor
-from udrl.policies import ABCPolicy
-from udrl.buffer import ReplayBuffer
+from .catch import CatchAdaptor
+from .policies import ABCPolicy
+from .buffer import ReplayBuffer
 
 
 @dataclass
